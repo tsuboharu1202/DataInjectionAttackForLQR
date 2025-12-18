@@ -29,6 +29,31 @@ end
 % メモリ効率化オプション
 SAVE_TRIAL_DATA_TO_FILE = true;  % true: 試行データをファイルに保存, false: メモリに保存（非推奨）
 
+% 並列処理オプション（MATLAB Online対応）
+% MATLAB Online環境でのみ自動的に並列処理を試行
+USE_PARALLEL = false;  % デフォルトはfalse
+if exist('/MATLAB Drive', 'dir')
+    % MATLAB Online環境: 並列処理を試行（Parallel Computing Toolboxが必要）
+    try
+        pool = gcp('nocreate');
+        if isempty(pool)
+            parpool('local');  % ローカルワーカーを起動
+            pool = gcp('nocreate');
+        end
+        if ~isempty(pool) && pool.NumWorkers > 1
+            USE_PARALLEL = true;
+            fprintf('MATLAB Online: 並列処理を有効化 (%d ワーカー)\n', pool.NumWorkers);
+        end
+    catch
+        % Parallel Computing Toolboxが利用できない場合は通常のforループを使用
+        USE_PARALLEL = false;
+        fprintf('並列処理は利用できません。通常のforループを使用します。\n');
+    end
+end
+
+% 90分タイムアウト対策: チェックポイント保存間隔（分）
+CHECKPOINT_INTERVAL_MIN = 60;  % 60分ごとにチェックポイントを保存
+
 % ========================================
 % 実験ループ
 % ========================================
@@ -65,6 +90,7 @@ total_conditions = 0;
 all_results = cell(TOTAL_CONDITIONS, 1);
 start_time = tic;
 timestamp = datestr(now, 'yyyymmdd_HHMMSS');  % チェックポイント用のタイムスタンプ
+last_checkpoint_time = 0;  % 最後のチェックポイント保存時刻（分）
 
 % 実験用のルートディレクトリを作成
 EXPERIMENT_DIR = fullfile(RESULT_DIR, sprintf('experiment_%s', timestamp));
@@ -222,161 +248,260 @@ for idx_eps = 1:length(PARAM_ATTACKER_UPPERLIMIT)
                 condition_results.trial_data.U_adv = cell(NUM_TRIALS, 1);
             end
             
+            % 試行結果を格納する一時配列（parfor対応）
+            trial_rho_ori = zeros(NUM_TRIALS, 1);
+            trial_rho_adv = zeros(NUM_TRIALS, 1);
+            trial_is_unstable = false(NUM_TRIALS, 1);
+            trial_rho_change = zeros(NUM_TRIALS, 1);
+            
             % 20回試行（システムは固定、U, X, Zだけを変える）
-            for trial = 1:NUM_TRIALS
-                try
-                    % 乱数シードを設定（U, X, Zが変わる）
-                    rng(trial);
-                    
-                    % データ生成（システムは固定）
-                    V = make_inputU(m, T);
-                    [X, Z, U] = datasim.simulate_openloop_stable(A, B, V);
-                    sd = datasim.SystemData(A, B, Q, R, X, Z, U);
-                    
-                    % データを保存（ファイルまたはメモリ）
-                    if SAVE_TRIAL_DATA_TO_FILE
-                        % ファイルに保存（メモリ効率化）
-                        trial_file = fullfile(condition_dir, sprintf('trial_%03d.mat', trial));
-                        
-                        % 試行情報を準備（最初の保存時）
-                        trial_info = struct();
-                        trial_info.trial_number = trial;
-                        trial_info.condition_number = total_conditions;
-                        trial_info.rng_seed = trial;  % 再現性のため
-                        trial_info.trial_timestamp = datestr(now);
-                        trial_info.eps_att = eps_att;
-                        trial_info.T = T;
-                        trial_info.n = n;
-                        trial_info.m = m;
-                        
-                        save(trial_file, 'X', 'Z', 'U', 'trial_info', '-v7.3');
-                    else
-                        % メモリに保存（旧方式）
-                        condition_results.trial_data.U{trial} = U;
-                        condition_results.trial_data.X{trial} = X;
-                        condition_results.trial_data.Z{trial} = Z;
-                    end
-                    
-                    % 元のシステムの評価
-                    K_ori = sd.opt_K();
-                    [~,lambda_ori] = eigs((A+B*K_ori), 1, 'largestabs');
-                    rho_ori = abs(lambda_ori);
-                    
-                    % 攻撃実行（eps_attを指定）
-                    [X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, ATTACK_METHOD, eps_att);
-                    
-                    % 攻撃後のシステムの評価
-                    sd_adv = datasim.SystemData(A,B,sd.Q,sd.R,X_sdp_adv,Z_sdp_adv,U_sdp_adv);
-                    K_adv = sd_adv.opt_K();
-                    [~,lambda_adv] = eigs((A+B*K_adv), 1, 'largestabs');
-                    rho_adv = abs(lambda_adv);
-                    
-                    % 攻撃データを保存（ファイルまたはメモリ）
-                    if SAVE_TRIAL_DATA_TO_FILE
-                        % ファイルに追加保存（既存のtrial_XXX.matに追加）
-                        trial_file = fullfile(condition_dir, sprintf('trial_%03d.mat', trial));
-                        X_adv = X_sdp_adv;  % 変数名を統一
-                        Z_adv = Z_sdp_adv;
-                        U_adv = U_sdp_adv;
-                        
-                        % 試行情報を更新（結果を追加）
-                        trial_info.rho_ori = rho_ori;
-                        trial_info.rho_adv = rho_adv;
-                        trial_info.is_unstable = (rho_adv >= 1.0);
-                        trial_info.rho_change = rho_adv - rho_ori;
-                        
-                        save(trial_file, 'X_adv', 'Z_adv', 'U_adv', 'trial_info', '-append');
-                        clear X_adv Z_adv U_adv trial_info;  % メモリをクリア
-                    else
-                        % メモリに保存（旧方式）
-                        condition_results.trial_data.X_adv{trial} = X_sdp_adv;
-                        condition_results.trial_data.Z_adv{trial} = Z_sdp_adv;
-                        condition_results.trial_data.U_adv{trial} = U_sdp_adv;
-                    end
-                    
-                    % 結果を記録
-                    condition_results.rho_ori(trial) = rho_ori;
-                    condition_results.rho_adv(trial) = rho_adv;
-                    condition_results.is_unstable(trial) = (rho_adv >= 1.0);
-                    condition_results.rho_change(trial) = rho_adv - rho_ori;
-                    
-                    % 進捗表示（試行レベル）
-                    trial_progress = (trial / NUM_TRIALS) * 100;
-                    condition_progress = ((total_conditions - 1) + trial / NUM_TRIALS) / TOTAL_CONDITIONS * 100;
-                    if mod(trial, 5) == 0 || trial == NUM_TRIALS
-                        fprintf('  試行 %d/%d完了 (条件内: %.1f%%, 全体: %.1f%%)\n', ...
-                            trial, NUM_TRIALS, trial_progress, condition_progress);
-                    end
-                    
-                    % メモリ効率化: 試行ごとに不要な変数をクリア
-                    clear V X Z U sd X_sdp_adv Z_sdp_adv U_sdp_adv sd_adv K_ori K_adv lambda_ori lambda_adv;
-                    
-                    % SDPソルバーのメモリクリア（YALMIPの内部キャッシュをクリア）
+            % 並列処理対応: USE_PARALLELがtrueの場合はparforを使用
+            if USE_PARALLEL
+                parfor trial = 1:NUM_TRIALS
                     try
-                        yalmip('clear');
-                    catch
-                        % yalmip('clear')が使えない場合は無視
+                        % 乱数シードを設定（U, X, Zが変わる）
+                        rng(trial);
+                        
+                        % データ生成（システムは固定）
+                        V = make_inputU(m, T);
+                        [X, Z, U] = datasim.simulate_openloop_stable(A, B, V);
+                        sd = datasim.SystemData(A, B, Q, R, X, Z, U);
+                        
+                        % 元のシステムの評価
+                        K_ori = sd.opt_K();
+                        [~,lambda_ori] = eigs((A+B*K_ori), 1, 'largestabs');
+                        rho_ori = abs(lambda_ori);
+                        
+                        % 攻撃実行（eps_attを指定）
+                        [X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, ATTACK_METHOD, eps_att);
+                        
+                        % 攻撃後のシステムの評価
+                        sd_adv = datasim.SystemData(A,B,sd.Q,sd.R,X_sdp_adv,Z_sdp_adv,U_sdp_adv);
+                        K_adv = sd_adv.opt_K();
+                        [~,lambda_adv] = eigs((A+B*K_adv), 1, 'largestabs');
+                        rho_adv = abs(lambda_adv);
+                        
+                        % ファイルに保存（parfor内では-fromstructオプションが必要）
+                        trial_file = fullfile(condition_dir, sprintf('trial_%03d.mat', trial));
+                        % すべてのデータを構造体にまとめる
+                        trial_data = struct();
+                        trial_data.X = X;
+                        trial_data.Z = Z;
+                        trial_data.U = U;
+                        trial_data.X_adv = X_sdp_adv;
+                        trial_data.Z_adv = Z_sdp_adv;
+                        trial_data.U_adv = U_sdp_adv;
+                        trial_data.trial_number = trial;
+                        trial_data.condition_number = total_conditions;
+                        trial_data.rng_seed = trial;
+                        % parfor内ではdatestr(now)が制限される可能性があるため、数値で保存
+                        trial_data.trial_timestamp_num = now;
+                        trial_data.eps_att = eps_att;
+                        trial_data.T = T;
+                        trial_data.n = n;
+                        trial_data.m = m;
+                        trial_data.rho_ori = rho_ori;
+                        trial_data.rho_adv = rho_adv;
+                        trial_data.is_unstable = (rho_adv >= 1.0);
+                        trial_data.rho_change = rho_adv - rho_ori;
+                        % parfor内では-structオプションを使用（-v7.3は最後に）
+                        save(trial_file, '-struct', 'trial_data', '-v7.3');
+                        
+                        % 結果を一時配列に保存（parfor内では共有変数への直接代入不可）
+                        trial_rho_ori(trial) = rho_ori;
+                        trial_rho_adv(trial) = rho_adv;
+                        trial_is_unstable(trial) = (rho_adv >= 1.0);
+                        trial_rho_change(trial) = rho_adv - rho_ori;
+                        
+                        % YALMIPのメモリクリア（parfor内ではclearは制限される）
+                        try
+                            yalmip('clear');
+                        catch
+                        end
+                        
+                    catch ME
+                        % エラー時はNaNを記録
+                        trial_rho_ori(trial) = NaN;
+                        trial_rho_adv(trial) = NaN;
+                        trial_is_unstable(trial) = false;
+                        trial_rho_change(trial) = NaN;
                     end
-                    
-                catch ME
-                    if isa(ME, 'MException')
-                        fprintf('  試行 %dでエラー: %s\n', trial, ME.message);
-                    else
-                        fprintf('  試行 %dでエラーが発生しました\n', trial);
+                end
+                fprintf('  並列処理完了: %d試行完了\n', NUM_TRIALS);
+            else
+                % 通常のforループ（並列処理なし）
+                for trial = 1:NUM_TRIALS
+                    try
+                        % 乱数シードを設定（U, X, Zが変わる）
+                        rng(trial);
+                        
+                        % データ生成（システムは固定）
+                        V = make_inputU(m, T);
+                        [X, Z, U] = datasim.simulate_openloop_stable(A, B, V);
+                        sd = datasim.SystemData(A, B, Q, R, X, Z, U);
+                        
+                        % データを保存（ファイルまたはメモリ）
+                        if SAVE_TRIAL_DATA_TO_FILE
+                            % ファイルに保存（メモリ効率化）
+                            trial_file = fullfile(condition_dir, sprintf('trial_%03d.mat', trial));
+                            
+                            % 試行情報を準備（最初の保存時）
+                            trial_info = struct();
+                            trial_info.trial_number = trial;
+                            trial_info.condition_number = total_conditions;
+                            trial_info.rng_seed = trial;  % 再現性のため
+                            trial_info.trial_timestamp = datestr(now);
+                            trial_info.eps_att = eps_att;
+                            trial_info.T = T;
+                            trial_info.n = n;
+                            trial_info.m = m;
+                            
+                            save(trial_file, 'X', 'Z', 'U', 'trial_info', '-v7.3');
+                        else
+                            % メモリに保存（旧方式）
+                            condition_results.trial_data.U{trial} = U;
+                            condition_results.trial_data.X{trial} = X;
+                            condition_results.trial_data.Z{trial} = Z;
+                        end
+                        
+                        % 元のシステムの評価
+                        K_ori = sd.opt_K();
+                        [~,lambda_ori] = eigs((A+B*K_ori), 1, 'largestabs');
+                        rho_ori = abs(lambda_ori);
+                        
+                        % 攻撃実行（eps_attを指定）
+                        [X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, ATTACK_METHOD, eps_att);
+                        
+                        % 攻撃後のシステムの評価
+                        sd_adv = datasim.SystemData(A,B,sd.Q,sd.R,X_sdp_adv,Z_sdp_adv,U_sdp_adv);
+                        K_adv = sd_adv.opt_K();
+                        [~,lambda_adv] = eigs((A+B*K_adv), 1, 'largestabs');
+                        rho_adv = abs(lambda_adv);
+                        
+                        % 攻撃データを保存（ファイルまたはメモリ）
+                        if SAVE_TRIAL_DATA_TO_FILE
+                            % ファイルに追加保存（既存のtrial_XXX.matに追加）
+                            trial_file = fullfile(condition_dir, sprintf('trial_%03d.mat', trial));
+                            X_adv = X_sdp_adv;  % 変数名を統一
+                            Z_adv = Z_sdp_adv;
+                            U_adv = U_sdp_adv;
+                            
+                            % 試行情報を更新（結果を追加）
+                            trial_info.rho_ori = rho_ori;
+                            trial_info.rho_adv = rho_adv;
+                            trial_info.is_unstable = (rho_adv >= 1.0);
+                            trial_info.rho_change = rho_adv - rho_ori;
+                            
+                            save(trial_file, 'X_adv', 'Z_adv', 'U_adv', 'trial_info', '-append');
+                            clear X_adv Z_adv U_adv trial_info;  % メモリをクリア
+                        else
+                            % メモリに保存（旧方式）
+                            condition_results.trial_data.X_adv{trial} = X_sdp_adv;
+                            condition_results.trial_data.Z_adv{trial} = Z_sdp_adv;
+                            condition_results.trial_data.U_adv{trial} = U_sdp_adv;
+                        end
+                        
+                        % 結果を記録
+                        trial_rho_ori(trial) = rho_ori;
+                        trial_rho_adv(trial) = rho_adv;
+                        trial_is_unstable(trial) = (rho_adv >= 1.0);
+                        trial_rho_change(trial) = rho_adv - rho_ori;
+                        
+                        % 進捗表示（試行レベル）
+                        trial_progress = (trial / NUM_TRIALS) * 100;
+                        condition_progress = ((total_conditions - 1) + trial / NUM_TRIALS) / TOTAL_CONDITIONS * 100;
+                        if mod(trial, 5) == 0 || trial == NUM_TRIALS
+                            fprintf('  試行 %d/%d完了 (条件内: %.1f%%, 全体: %.1f%%)\n', ...
+                                trial, NUM_TRIALS, trial_progress, condition_progress);
+                        end
+                        
+                        % メモリ効率化: 試行ごとに不要な変数をクリア
+                        clear V X Z U sd X_sdp_adv Z_sdp_adv U_sdp_adv sd_adv K_ori K_adv lambda_ori lambda_adv;
+                        
+                        % SDPソルバーのメモリクリア（YALMIPの内部キャッシュをクリア）
+                        try
+                            yalmip('clear');
+                        catch
+                            % yalmip('clear')が使えない場合は無視
+                        end
+                        
+                    catch ME
+                        if isa(ME, 'MException')
+                            fprintf('  試行 %dでエラー: %s\n', trial, ME.message);
+                        else
+                            fprintf('  試行 %dでエラーが発生しました\n', trial);
+                        end
+                        % エラー時はNaNを記録
+                        trial_rho_ori(trial) = NaN;
+                        trial_rho_adv(trial) = NaN;
+                        trial_is_unstable(trial) = false;
+                        trial_rho_change(trial) = NaN;
                     end
-                    % エラー時はNaNを記録
-                    condition_results.rho_ori(trial) = NaN;
-                    condition_results.rho_adv(trial) = NaN;
-                    condition_results.is_unstable(trial) = false;
-                    condition_results.rho_change(trial) = NaN;
                 end
             end
             
-            % 統計情報を計算
-            condition_results.mean_rho_ori = mean(condition_results.rho_ori, 'omitnan');
-            condition_results.mean_rho_adv = mean(condition_results.rho_adv, 'omitnan');
-            condition_results.mean_rho_change = mean(condition_results.rho_change, 'omitnan');
-            condition_results.unstable_rate = sum(condition_results.is_unstable) / NUM_TRIALS;
-            condition_results.std_rho_change = std(condition_results.rho_change, 'omitnan');
-            
-            % 条件ごとの統計情報をファイルに保存（メモリ効率化）
-            summary_file = fullfile(condition_dir, 'summary.mat');
-            save(summary_file, 'condition_results', '-v7.3');
-            
-            % 結果を保存（cell配列に直接代入: 再割り当てを避ける）
-            all_results{total_conditions} = condition_results;
-            
-            % 条件完了時の進捗表示
-            condition_progress = total_conditions / TOTAL_CONDITIONS * 100;
-            elapsed_time = toc(start_time);
-            fprintf('  結果: 不安定化率=%.1f%%, 平均固有値変化=%.4f\n', ...
-                condition_results.unstable_rate*100, condition_results.mean_rho_change);
-            fprintf('  全体進捗: %.1f%% (経過時間: %.1f分)\n', ...
-                condition_progress, elapsed_time / 60);
-            
-            % ========================================
-            % 途中結果を定期的に保存（各条件完了時）
-            % ========================================
-            checkpoint_filename = fullfile(RESULT_DIR, sprintf('checkpoint_%s.mat', timestamp));
+            % 結果をcondition_resultsに集約（parfor/for共通）
+            condition_results.rho_ori = trial_rho_ori;
+            condition_results.rho_adv = trial_rho_adv;
+            condition_results.is_unstable = trial_is_unstable;
+            condition_results.rho_change = trial_rho_change;
+        end
+        
+        % 統計情報を計算
+        condition_results.mean_rho_ori = mean(condition_results.rho_ori, 'omitnan');
+        condition_results.mean_rho_adv = mean(condition_results.rho_adv, 'omitnan');
+        condition_results.mean_rho_change = mean(condition_results.rho_change, 'omitnan');
+        condition_results.unstable_rate = sum(condition_results.is_unstable) / NUM_TRIALS;
+        condition_results.std_rho_change = std(condition_results.rho_change, 'omitnan');
+        
+        % 条件ごとの統計情報をファイルに保存（メモリ効率化）
+        summary_file = fullfile(condition_dir, 'summary.mat');
+        save(summary_file, 'condition_results', '-v7.3');
+        
+        % 結果を保存（cell配列に直接代入: 再割り当てを避ける）
+        all_results{total_conditions} = condition_results;
+        
+        % 条件完了時の進捗表示
+        condition_progress = total_conditions / TOTAL_CONDITIONS * 100;
+        elapsed_time = toc(start_time);
+        fprintf('  結果: 不安定化率=%.1f%%, 平均固有値変化=%.4f\n', ...
+            condition_results.unstable_rate*100, condition_results.mean_rho_change);
+        fprintf('  全体進捗: %.1f%% (経過時間: %.1f分)\n', ...
+            condition_progress, elapsed_time / 60);
+        
+        % ========================================
+        % 途中結果を定期的に保存（各条件完了時 + 時間ベース）
+        % ========================================
+        checkpoint_filename = fullfile(RESULT_DIR, sprintf('checkpoint_%s.mat', timestamp));
+        elapsed_time_min = toc(start_time) / 60;
+        
+        % 時間ベースのチェックポイント（90分タイムアウト対策）
+        % 各条件完了時またはCHECKPOINT_INTERVAL_MIN分経過したら保存
+        should_save_checkpoint = (total_conditions == 1) || ...
+            (elapsed_time_min - last_checkpoint_time >= CHECKPOINT_INTERVAL_MIN);
+        
+        if should_save_checkpoint
             try
                 % cell配列を構造体配列に変換して保存（互換性のため）
                 all_results_array = [all_results{1:total_conditions}];
                 save(checkpoint_filename, 'all_results_array', 'PARAM_ATTACKER_UPPERLIMIT', ...
                     'PARAM_SAMPLE_COUNT', 'PARAM_SYSTEM_DIM', 'NUM_TRIALS', 'ATTACK_METHOD', ...
                     'total_conditions', 'TOTAL_CONDITIONS', 'start_time', 'SAVE_TRIAL_DATA_TO_FILE', ...
-                    'EXPERIMENT_DIR', '-v7.3');
+                    'EXPERIMENT_DIR', 'elapsed_time_min', '-v7.3');
                 clear all_results_array;  % メモリをクリア
-                fprintf('  チェックポイントを保存: %s\n', checkpoint_filename);
+                last_checkpoint_time = elapsed_time_min;
+                fprintf('  チェックポイントを保存: %s (経過時間: %.1f分)\n', checkpoint_filename, elapsed_time_min);
             catch ME
                 if isa(ME, 'MException')
-                    warning(ME.identifier, 'チェックポイントの保存に失敗: %s', ME.message);
+                    warning(ME.identifier, 'チェックポイント保存に失敗: %s', ME.message);
                 else
-                    warning('チェックポイントの保存に失敗しました');
+                    warning('チェックポイント保存に失敗しました');
                 end
             end
         end
     end
 end
+
 
 % ========================================
 % 結果の保存と表示
