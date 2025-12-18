@@ -562,16 +562,21 @@ fprintf('%-8s %-6s %-6s %-6s %-12s %-12s %-12s\n', ...
 fprintf('%s\n', repmat('-', 1, 70));
 
 % all_resultsがセル配列か構造体配列かを判定して適切にアクセス
+% 実際のサイズを確認（実験が途中で終了した場合に備える）
 if iscell(all_results)
-    for i = 1:total_conditions
-        r = all_results{i};
-        fprintf('%-8.4f %-6d %-6d %-6d %-12.1f%% %-12.4f %-12.4f\n', ...
-            r.eps_att, r.T, r.n, r.m, ...
-            r.unstable_rate*100, r.mean_rho_change, r.std_rho_change);
+    actual_size = length(all_results);
+    for i = 1:min(total_conditions, actual_size)
+        if ~isempty(all_results{i})
+            r = all_results{i};
+            fprintf('%-8.4f %-6d %-6d %-6d %-12.1f%% %-12.4f %-12.4f\n', ...
+                r.eps_att, r.T, r.n, r.m, ...
+                r.unstable_rate*100, r.mean_rho_change, r.std_rho_change);
+        end
     end
 else
     % 構造体配列の場合
-    for i = 1:total_conditions
+    actual_size = length(all_results);
+    for i = 1:min(total_conditions, actual_size)
         r = all_results(i);
         fprintf('%-8.4f %-6d %-6d %-6d %-12.1f%% %-12.4f %-12.4f\n', ...
             r.eps_att, r.T, r.n, r.m, ...
