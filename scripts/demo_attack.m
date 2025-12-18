@@ -1,6 +1,11 @@
 % U生成→データ生成→SDP→表示の最小デモ
 clear; clc; close all;
-rehash toolboxcache;  % キャッシュをクリア
+% キャッシュをクリア（MATLAB Onlineではエラーになる可能性があるため、try-catchで囲む）
+try
+    rehash toolboxcache;
+catch
+    % MATLAB Onlineではスキップ
+end
 
 % 1) 連続の種 or 再現性
 rng(1);
