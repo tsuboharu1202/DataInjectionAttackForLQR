@@ -13,12 +13,12 @@ startup;
 ATTACK_METHOD = cfg.AttackType.IMPLICIT_DGSM_EV;
 
 % 変動パラメータ（先行研究に基づく）
-PARAM_ATTACKER_UPPERLIMIT = [0.0001,0.0005, 0.001, 0.005,0.01];  % 攻撃制約
-PARAM_SAMPLE_COUNT = [5, 10, 20, 50, 100];  % サンプル数
-PARAM_SYSTEM_DIM = [ 3, 2; 4, 3; 6, 4; 8, 5];  % [n, m] の組み合わせ
+PARAM_ATTACKER_UPPERLIMIT = [0.0005, 0.001, 0.005,0.01];  % 攻撃制約
+PARAM_SAMPLE_COUNT = [5, 10, 20];  % サンプル数
+PARAM_SYSTEM_DIM = [ 3, 2;6, 4];  % [n, m] の組み合わせ
 
 % 実験設定
-NUM_TRIALS = 50;  % 各条件での試行回数
+NUM_TRIALS = 20;  % 各条件での試行回数
 RESULT_DIR = fullfile(fileparts(mfilename('fullpath')), 'Result');
 
 % 結果保存用のディレクトリを作成
