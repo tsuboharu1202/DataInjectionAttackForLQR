@@ -1,0 +1,79 @@
+# MATLAB
+*.asv
+*.autosave
+*.m~
+*.mlappinstall
+*.mltbx
+
+# MATLAB Compiler
+*.ctf
+
+# MATLAB Project
+*.prj
+*.slx
+*.slxc
+*.sldd
+*.slddc
+*.sldx
+
+# MATLAB Generated Files
+*.mexw64
+*.mexw32
+*.mexa64
+*.mexmaci64
+*.mexmaca64
+
+# MATLAB Cache
+.matlab/
+*.cache
+
+# Build artifacts
+build/
+dist/
+
+# Data files (実験結果)
+*.mat
+!**/system_params.mat  # システムパラメータは含める（オプション）
+Experiment/Result/
+*.log
+
+# PDF files (論文などは含めない場合)
+# *.pdf
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Sandbox (開発用コード)
+# SandBox/
+# SandBox2/
+
+# Resources (プロジェクト設定ファイル)
+resources/
+
+# チェックポイントファイル
+checkpoint_*.mat
+
+# 実行ログ
+run_*.log
+run_*.pid
+
