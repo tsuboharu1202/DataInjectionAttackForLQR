@@ -13,12 +13,12 @@ startup;
 ATTACK_METHOD = cfg.AttackType.IMPLICIT_DGSM_EV;
 
 % 変動パラメータ（先行研究に基づく）
-PARAM_ATTACKER_UPPERLIMIT = [0.0005, 0.001, 0.005,0.01];  % 攻撃制約
+PARAM_ATTACKER_UPPERLIMIT = [0.0005, 0.001, 0.005];  % 攻撃制約
 PARAM_SAMPLE_COUNT = [5, 10, 20];  % サンプル数
 PARAM_SYSTEM_DIM = [ 3, 2;6, 4];  % [n, m] の組み合わせ
 
 % 実験設定
-NUM_TRIALS = 20;  % 各条件での試行回数
+NUM_TRIALS = 10;  % 各条件での試行回数
 RESULT_DIR = fullfile(fileparts(mfilename('fullpath')), 'Result');
 
 % 結果保存用のディレクトリを作成
@@ -285,7 +285,7 @@ for idx_eps = 1:length(PARAM_ATTACKER_UPPERLIMIT)
                         trial_info.is_unstable = (rho_adv >= 1.0);
                         trial_info.rho_change = rho_adv - rho_ori;
                         
-                        save(trial_file, 'X_adv', 'Z_adv', 'U_adv', 'trial_info', '-append', '-v7.3');
+                        save(trial_file, 'X_adv', 'Z_adv', 'U_adv', 'trial_info', '-append');
                         clear X_adv Z_adv U_adv trial_info;  % メモリをクリア
                     else
                         % メモリに保存（旧方式）
@@ -436,10 +436,21 @@ fprintf('%-8s %-6s %-6s %-6s %-12s %-12s %-12s\n', ...
     'eps', 'T', 'n', 'm', '不安定化率', '平均rho変化', 'std(rho変化)');
 fprintf('%s\n', repmat('-', 1, 70));
 
-for i = 1:total_conditions
-    r = all_results{i};
-    fprintf('%-8.4f %-6d %-6d %-6d %-12.1f%% %-12.4f %-12.4f\n', ...
-        r.eps_att, r.T, r.n, r.m, ...
-        r.unstable_rate*100, r.mean_rho_change, r.std_rho_change);
+% all_resultsがセル配列か構造体配列かを判定して適切にアクセス
+if iscell(all_results)
+    for i = 1:total_conditions
+        r = all_results{i};
+        fprintf('%-8.4f %-6d %-6d %-6d %-12.1f%% %-12.4f %-12.4f\n', ...
+            r.eps_att, r.T, r.n, r.m, ...
+            r.unstable_rate*100, r.mean_rho_change, r.std_rho_change);
+    end
+else
+    % 構造体配列の場合
+    for i = 1:total_conditions
+        r = all_results(i);
+        fprintf('%-8.4f %-6d %-6d %-6d %-12.1f%% %-12.4f %-12.4f\n', ...
+            r.eps_att, r.T, r.n, r.m, ...
+            r.unstable_rate*100, r.mean_rho_change, r.std_rho_change);
+    end
 end
 
