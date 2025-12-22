@@ -14,8 +14,8 @@ classdef Const
         
         % 攻撃側制約
         ATTACKER_UPPERLIMIT = 0.01
-        IDGSM_ALPHA = 0.001
-        MAX_ITERATION = 10
+        IDGSM_ALPHA = 1e-5
+        MAX_ITERATION = 1e4
         
         % 乱数生成
         SEED = []

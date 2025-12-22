@@ -3,7 +3,7 @@ clear; clc; close all;
 rehash toolboxcache;  % キャッシュをクリア
 
 % 1) 連続の種 or 再現性
-rng(1);
+% rng(1);
 
 % 2) システム＆重み
 [n,m,T] = deal(4,3,cfg.Const.SAMPLE_COUNT);
@@ -21,7 +21,7 @@ rho_ori = max(abs(ev_ori));
 disp('rho_ori');disp(rho_ori);
 
 
-[X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, cfg.AttackType.IMPLICIT_DGSM_EV);
+[X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, cfg.AttackType.IMPLICIT_IDGSM_EV);
 
 % 差分を計算（グラフ表示用）
 dX = X_sdp_adv - X;

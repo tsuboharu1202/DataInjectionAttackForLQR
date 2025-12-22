@@ -1,7 +1,7 @@
 function d = dF1_dL(sd, L)
 % dF1_dL: ∂ vec(F1) / ∂ vec(L) from Eq.(15) in the paper.
 % F1 = [ S, V U L; (V U L)^T, X L ] (note: XL is symmetric in constraints).
-
+% 確認済み
 X = sd.X;
 U = sd.U;
 R = (sd.R + sd.R')/2;

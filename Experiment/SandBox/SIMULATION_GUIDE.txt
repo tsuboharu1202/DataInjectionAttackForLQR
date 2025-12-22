@@ -1,0 +1,175 @@
+================================================================================
+データインジェクション攻撃シミュレーション - 実験ガイド
+================================================================================
+
+【プロジェクト構造】
+--------------------------------------------------------------------------------
+ForLQR/
+├── Experiment/
+│   ├── Main.m                          # メイン実験スクリプト
+│   ├── +make_lti_system/              # システム生成関数（パッケージ）
+│   │   └── make_structured_lti_diagonal.m
+│   ├── +visualize_common/              # 共通可視化関数（パッケージ）
+│   │   ├── calc_metrics.m
+│   │   ├── plot_eigenvalues.m
+│   │   ├── plot_singular_values.m
+│   │   └── plot_rho.m
+│   ├── SandBox/
+│   │   ├── Free.txt                    # 実験設定の説明（Cursorが記入）
+│   │   └── SIMULATION_GUIDE.txt       # このファイル
+│   └── Result/
+│       └── experiment_YYYYMMDD_HHMMSS/
+│           ├── experiment_info.mat
+│           ├── experiment_info.txt     # Free.txtからコピー
+│           ├── experiment_results.mat
+│           ├── visualize_experiment.m  # 実験固有の可視化スクリプト（実験ごとに作成）
+│           ├── plot_experiment_specific.m  # 実験固有の可視化関数（実験ごとに作成）
+│           └── condition_XXX/
+│               ├── summary.mat
+│               ├── system_params.mat
+│               └── trial_XXX.mat
+
+【実験の進め方】
+--------------------------------------------------------------------------------
+
+1. 実験設定の準備
+   - Experiment/SandBox/Free.txt に実験設定を記入
+     * システム生成関数名
+     * パラメータ（alpha, eps, T, n, mなど）
+     * システム構造の説明
+   - 例: "A = diag(alpha + delta_i), B = 1_n, Q = I, R = 1"
+
+2. システム生成関数の作成（必要に応じて）
+   - Experiment/+make_lti_system/ に新しい関数を追加
+   - 関数名: make_XXX_lti.m（XXXはシステム構造を表す名前）
+   - 関数シグネチャ: [A, B, Q, R] = make_XXX_lti(パラメータ, n, m)
+   - Main.mでこの関数を呼び出すように設定
+
+3. Main.mの設定
+   - パラメータを設定（PARAM_ALPHA, PARAM_ATTACKER_UPPERLIMITなど）
+   - システム生成関数を指定
+   - 例: [A, B, Q, R] = make_lti_system.make_structured_lti_diagonal(alpha, n, m);
+
+4. 実験の実行
+   - cd Experiment
+   - Main を実行
+   - 結果は Result/experiment_YYYYMMDD_HHMMSS/ に保存される
+
+5. 結果の可視化
+   - cd Result/experiment_YYYYMMDD_HHMMSS
+   - visualize_experiment() を実行
+   - または、パスを指定: visualize_experiment('Result/experiment_YYYYMMDD_HHMMSS')
+
+【システム生成関数の追加方法】
+--------------------------------------------------------------------------------
+
+新しいシステム構造を追加する場合：
+
+1. Experiment/+make_lti_system/ に新しい関数を作成
+   例: make_custom_lti.m
+
+2. 関数の構造:
+   function [A, B, Q, R] = make_custom_lti(param1, param2, n, m)
+       % システム行列を生成
+       A = ...;
+       B = ...;
+       Q = ...;
+       R = ...;
+   end
+
+3. Main.mで呼び出し:
+   [A, B, Q, R] = make_lti_system.make_custom_lti(param1, param2, n, m);
+
+【可視化のカスタマイズ】
+--------------------------------------------------------------------------------
+
+1. 共通可視化関数（Experiment/+visualize_common/）
+   - 再利用可能な共通描画関数
+   - visualize_common.plot_rho(), visualize_common.calc_metrics() など
+
+2. 実験固有の可視化（実験フォルダ内）
+   - visualize_experiment.m: メインの可視化スクリプト（実験ごとに作成）
+   - plot_experiment_specific.m: 実験固有の可視化関数（実験ごとに作成）
+   - 実験ごとに異なる可視化が必要な場合は、これらのファイルを編集
+
+3. 可視化関数の追加方法:
+   - plot_experiment_specific.m に新しい関数を追加
+   - visualize_experiment.m から呼び出す
+
+【重要な概念】
+--------------------------------------------------------------------------------
+
+1. システム構造
+   - A: システム行列（n×n）
+   - B: 入力行列（n×m）
+   - Q: 状態重み行列（n×n）
+   - R: 入力重み行列（m×m）
+
+2. スペクトル半径（rho）
+   - rho_A: Aのスペクトル半径 = max(abs(eig(A)))
+   - rho_A_BK: A+BK_optのスペクトル半径 = max(abs(eig(A+B*K_opt)))
+   - rho < 1: 安定、rho >= 1: 不安定
+
+3. 攻撃のfeasibility
+   - sol.problem == 0: feasible（攻撃成功の可能性が高い）
+   - sol.problem != 0: infeasible または エラー
+   - is_feasibleフラグがtrial_infoに保存される
+
+4. データ保存
+   - 各試行: trial_XXX.mat（X, Z, U, X_adv, Z_adv, U_adv, trial_info）
+   - 各条件: summary.mat（統計情報）
+   - 実験全体: experiment_results.mat（全条件の結果）
+
+【実験パラメータの意味】
+--------------------------------------------------------------------------------
+
+- alpha: システム行列Aの対角成分の基準値
+- eps (eps_att): 攻撃制約（ノイズの大きさの上限）
+- T: サンプル数
+- n: 状態次元
+- m: 入力次元
+- NUM_TRIALS: 各条件での試行回数
+
+【トラブルシューティング】
+--------------------------------------------------------------------------------
+
+1. LQRエラー（制御不可能なシステム）
+   - システム生成時に制御可能性をチェック
+   - エラー時はその試行をスキップ
+
+2. 可視化関数が見つからない
+   - +visualize_common/ がパスに追加されているか確認
+   - visualize_experiment.m が正しくパスを解決しているか確認
+
+3. 実験結果ファイルが見つからない
+   - experiment_results.mat が実験フォルダ内にあるか確認
+   - 旧形式（Result直下）の場合は手動でコピー
+
+【次の実験を始める時のチェックリスト】
+--------------------------------------------------------------------------------
+
+□ Free.txtに実験設定を記入
+□ システム生成関数を作成（必要に応じて）
+□ Main.mのパラメータを設定
+□ Main.mでシステム生成関数を指定
+□ 実験を実行
+□ 結果を可視化
+□ plot_experiment_specific.mに実験固有の可視化を追加（必要に応じて）
+
+【現在の実験設定（例）】
+--------------------------------------------------------------------------------
+
+システム生成関数: make_lti_system.make_structured_lti_diagonal
+システム構造: A = diag(alpha + delta_i), B = 1_n, Q = I, R = 1
+パラメータ:
+  - alpha: [-1.2, -0.6, -0.2, 0.2, 0.6, 1.2]
+  - eps: [0.0001, 0.001, 0.01]
+  - n: 6, m: 1, T: 10
+  - NUM_TRIALS: 20
+
+================================================================================
+更新日: 2025-12-18
+================================================================================
+
+
+

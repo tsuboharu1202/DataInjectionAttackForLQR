@@ -1,7 +1,7 @@
 function d = dF2_dL(sd, L)
 % dF2_dL: ∂ vec(F2) / ∂ vec(L) from Eq.(15) in the paper.
 % F2 = [ X L - I, Z L; (Z L)^T, X L ].
-
+% 確認済み
 X = sd.X;
 Z = sd.Z;
 n = size(X,1);

@@ -113,8 +113,8 @@ JD = [dG1_dD;
     dG3_dD;
     dG4_dD];
 
-out.JyT = Jy';
-out.JDT = JD';
+out.Jy = Jy;
+out.JD = JD;
 out.dimS = dimS;
 end
 

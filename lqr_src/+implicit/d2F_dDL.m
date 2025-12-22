@@ -2,7 +2,7 @@ function d2 = d2F_dDL(sd, L, E1, E2)
 % d2F_dDL: ∂^2 vec(F) / ∂ vec(D) ∂ vec(L) from Eq.(15) in the paper.
 % Returns matrix mapping vec(dL) -> vec( d(∂F/∂D) ) or equivalently mapping vec(dD)→vec(d(∂F/∂L)).
 % We use the explicit expressions provided for F1 and F2 and lift to F=diag(F1,F2).
-
+% 確認済み
 X = sd.X; U = sd.U; Z = sd.Z; %#ok<NASGU>
 n = size(X,1); T = size(X,2); m = size(U,1);
 bar_n = 2*n + m;
@@ -44,7 +44,7 @@ Dblk = [zeros(m,bar_n); EX];                   % (m+n)×bar_n
 %      + (C_{bar_n,T}^T ⊗ I_{(m+n)^2}) Ct1 ( I_{(m+n)T} ⊗ vec(A) ) (I_T ⊗ B)
 vecA = A(:);
 I_mnT = speye((m+n)*T);
-termA = kron(vecA, speye((m+n)*T));
+termA = kron(vecA, I_mnT);
 d2F1 = C1 * termA * kron(speye(T), B) + C1 * termA * kron(speye(T), Dblk) ...
     + kron(CnT', speye((m+n)^2)) * Ct1 * kron(I_mnT, vecA) * kron(speye(T), B);
 

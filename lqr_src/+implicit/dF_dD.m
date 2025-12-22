@@ -1,4 +1,5 @@
 function d = dF_dD(sd, L, E1, E2)
+% 確認済み
 % dF_dD: ∂ vec(F) / ∂ vec(D) using Eq.(15) with D=[Z;X;U].
 % F = diag(F1,F2).
 
@@ -24,7 +25,6 @@ VEU = V * EU;                              % m×(2n+m)
 % ---- dF1/dD (Eq.(15)) ----
 A = [zeros(m,T); L'];                      % (m+n)×T
 B = [VEU; zeros(n,bar_n)];                 % (m+n)×bar_n
-CT = implicit.commutation(bar_n, T);
 CbarT = implicit.commutation(bar_n, T);
 % term: [0;L^T] ⊗ [VEU;0] + ([VEU;0] ⊗ [0;L^T]) C_{bar_n,T} + [0;L^T] ⊗ [0, EX]
 Dblk = [zeros(m,bar_n); EX];               % (m+n)×bar_n

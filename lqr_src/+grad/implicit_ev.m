@@ -5,7 +5,7 @@ function [gradX_pi, gradZ_pi, gradU_pi] = implicit_ev(sd)
 %
 % Output matches grad.direct_ev(): projected gradient Π_λ for X,Z,U.
 
-    [gradX_pi, gradZ_pi, gradU_pi] = implicit.ev_grad_ev(sd);
+[gradX_pi, gradZ_pi, gradU_pi] = implicit.ev_grad_ev(sd);
 end
 
 
