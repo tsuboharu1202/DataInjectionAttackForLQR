@@ -1,4 +1,4 @@
-function [gradX, gradZ, gradU, dbg] = ev_grad_ev(sd)
+function [gradX, gradZ, gradU, dbg] = grad_ev(sd)
 % ev_grad_ev: Implicit gradient for dominant eigenvalue magnitude objective.
 %
 % This function is the main entry used by grad.implicit_ev().

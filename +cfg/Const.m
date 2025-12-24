@@ -13,9 +13,15 @@ classdef Const
         VERBOSE = 0
         
         % 攻撃側制約
-        ATTACKER_UPPERLIMIT = 0.01
-        IDGSM_ALPHA = 1e-5
-        MAX_ITERATION = 1e4
+        ATTACKER_UPPERLIMIT = 1e-3
+        IDGSM_ALPHA = 5*1e-5
+        MAX_ITERATION = 100
+        
+        % 局所最適解回避（IDGSM用）
+        IDGSM_ESCAPE_LOCAL_MIN = true  % 局所最適解を回避するかどうか
+        IDGSM_RHO_CHANGE_THRESHOLD = 1e-4  % スペクトル半径の変化がこの値以下だったらランダムノイズを加える
+        IDGSM_RANDOM_NOISE_SCALE = 5  % ランダムノイズのスケール（ATTACKER_UPPERLIMITに対する相対値）
+        IDGSM_STAGNATION_STEPS = 10  % このステップ数連続で変化が閾値以下だったらランダムノイズを加える
         
         % 乱数生成
         SEED = []

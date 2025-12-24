@@ -31,6 +31,10 @@ end
 % メモリ効率化オプション
 SAVE_TRIAL_DATA_TO_FILE = true;
 
+% ノイズ履歴保存オプション（IDGSM攻撃の各ステップでのノイズを記録）
+% 注意: 履歴データは大きくなるため、通常は false に設定
+SAVE_NOISE_HISTORY = false;  % true にすると各ステップのノイズを保存（可視化用）
+
 % ========================================
 % システム生成（1回のみ、全データセットで同じ）
 % ========================================
@@ -91,6 +95,7 @@ experiment_info.system_Q = Q;
 experiment_info.system_R = R;
 experiment_info.rho_A = rho_A;
 experiment_info.save_trial_data_to_file = SAVE_TRIAL_DATA_TO_FILE;
+experiment_info.save_noise_history = SAVE_NOISE_HISTORY;
 
 experiment_info_file = fullfile(EXPERIMENT_DIR, 'experiment_info.mat');
 save(experiment_info_file, 'experiment_info', '-v7.3');
@@ -161,7 +166,12 @@ for dataset = 1:NUM_DATASETS
         
         try
             % 攻撃実行
-            [X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, ATTACK_METHOD, eps_att);
+            if SAVE_NOISE_HISTORY
+                [X_sdp_adv, Z_sdp_adv, U_sdp_adv, attack_history] = attack.execute_attack(sd, ATTACK_METHOD, eps_att, SAVE_NOISE_HISTORY);
+            else
+                [X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, ATTACK_METHOD, eps_att);
+                attack_history = [];
+            end
             
             % 攻撃後のSDPを解いて評価
             sd_adv = datasim.SystemData(A, B, Q, R, X_sdp_adv, Z_sdp_adv, U_sdp_adv);
@@ -184,6 +194,11 @@ for dataset = 1:NUM_DATASETS
             result.sdp_problem_code_ori = diagInfo_ori.problem;
             result.sdp_problem_code_adv = diagInfo_adv.problem;
             
+            % ノイズ履歴を保存（オプション）
+            if SAVE_NOISE_HISTORY && ~isempty(attack_history)
+                result.attack_history = attack_history;
+            end
+            
             all_results{trial_idx} = result;
             
             % 攻撃データを保存
@@ -202,6 +217,12 @@ for dataset = 1:NUM_DATASETS
                 attack_data.is_feasible_adv = is_feasible_adv;
                 attack_data.sdp_problem_code_ori = diagInfo_ori.problem;
                 attack_data.sdp_problem_code_adv = diagInfo_adv.problem;
+                
+                % ノイズ履歴を保存（オプション）
+                if SAVE_NOISE_HISTORY && ~isempty(attack_history)
+                    attack_data.attack_history = attack_history;
+                end
+                
                 save(trial_file, 'attack_data', '-v7.3');
             end
             

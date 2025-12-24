@@ -8,7 +8,10 @@ classdef AttackType
         
         IMPLICIT_DGSM_EV
         IMPLICIT_IDGSM_EV
-
+        
+        IMPLICIT_DGSM_SCORE
+        IMPLICIT_IDGSM_SCORE
+        
         SDP_SCORE
     end
 end

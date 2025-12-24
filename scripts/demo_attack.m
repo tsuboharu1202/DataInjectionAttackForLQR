@@ -21,7 +21,7 @@ rho_ori = max(abs(ev_ori));
 disp('rho_ori');disp(rho_ori);
 
 
-[X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, cfg.AttackType.IMPLICIT_IDGSM_EV);
+[X_sdp_adv, Z_sdp_adv, U_sdp_adv] = attack.execute_attack(sd, cfg.AttackType.IMPLICIT_IDGSM_SCORE, [], false);
 
 % 差分を計算（グラフ表示用）
 dX = X_sdp_adv - X;
@@ -33,6 +33,13 @@ sd_sdp_ev = datasim.SystemData(A,B,sd.Q,sd.R,X_sdp_adv,Z_sdp_adv,U_sdp_adv);
 K_sdp_ev = sd_sdp_ev.opt_K();
 lambda_sdp_ev = max(abs(eig(A+B*K_sdp_ev)));
 disp('lambda_sdp_ev');disp(lambda_sdp_ev);
+
+score_ori = utils.real_score(sd,K_ori);
+score_sdp_ev = utils.real_score(sd_sdp_ev,K_sdp_ev);
+disp('score_ori');disp(score_ori);
+disp('score_sdp_ev');disp(score_sdp_ev);
+
+
 
 
 % 6) 簡単表示
